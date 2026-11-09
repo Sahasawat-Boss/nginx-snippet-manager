@@ -1,9 +1,13 @@
 export default function Sidebar({
   search,
   onSearch,
+  searchRef,
   tags,
   activeTag,
   onSelectTag,
+  favoritesOnly,
+  favoriteCount,
+  onToggleFavorites,
   list,
   selectedId,
   onSelect,
@@ -22,6 +26,7 @@ export default function Sidebar({
       </header>
 
       <input
+        ref={searchRef}
         className="input"
         type="search"
         placeholder="ค้นหาชื่อ คำอธิบาย หรือ config"
@@ -30,21 +35,27 @@ export default function Sidebar({
         onChange={(event) => onSearch(event.target.value)}
       />
 
-      {tags.length > 0 && (
-        <div className="tag-filter">
-          {tags.map(({ name, count }) => (
-            <button
-              key={name}
-              type="button"
-              className={`tag${activeTag === name ? ' active' : ''}`}
-              aria-pressed={activeTag === name}
-              onClick={() => onSelectTag(activeTag === name ? null : name)}
-            >
-              {name} <span className="tag-count">{count}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="tag-filter">
+        <button
+          type="button"
+          className={`tag${favoritesOnly ? ' active' : ''}`}
+          aria-pressed={favoritesOnly}
+          onClick={onToggleFavorites}
+        >
+          ★ รายการโปรด <span className="tag-count">{favoriteCount ?? 0}</span>
+        </button>
+        {tags.map(({ name, count }) => (
+          <button
+            key={name}
+            type="button"
+            className={`tag${activeTag === name ? ' active' : ''}`}
+            aria-pressed={activeTag === name}
+            onClick={() => onSelectTag(activeTag === name ? null : name)}
+          >
+            {name} <span className="tag-count">{count}</span>
+          </button>
+        ))}
+      </div>
 
       <ul className="snippet-list">
         {list?.data.map((item) => (
@@ -54,7 +65,10 @@ export default function Sidebar({
               className={`snippet-item${item.id === selectedId ? ' selected' : ''}`}
               onClick={() => onSelect(item.id)}
             >
-              <strong>{item.title}</strong>
+              <strong>
+                {item.favorite && <em className="star">★ </em>}
+                {item.title}
+              </strong>
               {item.description && <span>{item.description}</span>}
             </button>
           </li>

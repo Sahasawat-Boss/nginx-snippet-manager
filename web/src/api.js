@@ -24,15 +24,18 @@ async function request(path, { method = 'GET', body, signal } = {}) {
 }
 
 export const api = {
-  listSnippets({ q, tag, page }, signal) {
+  listSnippets({ q, tag, favorite, page }, signal) {
     const params = new URLSearchParams({ page: String(page), limit: '20' });
     if (q) params.set('q', q);
     if (tag) params.set('tag', tag);
+    if (favorite) params.set('favorite', 'true');
     return request(`/snippets?${params}`, { signal });
   },
   getSnippet: (id, signal) => request(`/snippets/${id}`, { signal }),
   createSnippet: (body) => request('/snippets', { method: 'POST', body }),
   updateSnippet: (id, body) => request(`/snippets/${id}`, { method: 'PUT', body }),
   deleteSnippet: (id) => request(`/snippets/${id}`, { method: 'DELETE' }),
+  setFavorite: (id, favorite) => request(`/snippets/${id}/favorite`, { method: 'PUT', body: { favorite } }),
   listTags: (signal) => request('/tags', { signal }),
+  getStats: (signal) => request('/stats', { signal }),
 };

@@ -1,8 +1,17 @@
 import { useState } from 'react';
+import { formatDate } from '../format.js';
+import CodeView from './CodeView.jsx';
+import ConfigCheck from './ConfigCheck.jsx';
 
-const dateFormat = new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+function fileNameFor(title) {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${slug || 'snippet'}.conf`;
+}
 
-export default function SnippetDetail({ snippet, onEdit, onDelete }) {
+export default function SnippetDetail({ snippet, onEdit, onDelete, onDuplicate, onToggleFavorite }) {
   const [copyLabel, setCopyLabel] = useState('คัดลอก');
   const [confirming, setConfirming] = useState(false);
 
@@ -16,12 +25,33 @@ export default function SnippetDetail({ snippet, onEdit, onDelete }) {
     setTimeout(() => setCopyLabel('คัดลอก'), 1500);
   }
 
+  function download() {
+    const url = URL.createObjectURL(new Blob([`${snippet.content}\n`], { type: 'text/plain' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileNameFor(snippet.title);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <article className="detail">
       <header className="detail-header">
-        <div>
-          <h2>{snippet.title}</h2>
-          {snippet.description && <p className="description">{snippet.description}</p>}
+        <div className="detail-title">
+          <button
+            type="button"
+            className={`star-toggle${snippet.favorite ? ' on' : ''}`}
+            aria-pressed={snippet.favorite}
+            aria-label="รายการโปรด"
+            title={snippet.favorite ? 'เอาออกจากรายการโปรด' : 'เพิ่มในรายการโปรด'}
+            onClick={onToggleFavorite}
+          >
+            {snippet.favorite ? '★' : '☆'}
+          </button>
+          <div>
+            <h2>{snippet.title}</h2>
+            {snippet.description && <p className="description">{snippet.description}</p>}
+          </div>
         </div>
         <div className="actions">
           {confirming ? (
@@ -35,6 +65,9 @@ export default function SnippetDetail({ snippet, onEdit, onDelete }) {
             </>
           ) : (
             <>
+              <button type="button" className="button ghost" onClick={onDuplicate}>
+                ทำสำเนา
+              </button>
               <button type="button" className="button ghost" onClick={onEdit}>
                 แก้ไข
               </button>
@@ -47,13 +80,18 @@ export default function SnippetDetail({ snippet, onEdit, onDelete }) {
       </header>
 
       <div className="code-block">
-        <button type="button" className="button ghost copy" onClick={copy}>
-          {copyLabel}
-        </button>
-        <pre>
-          <code>{snippet.content}</code>
-        </pre>
+        <div className="code-actions">
+          <button type="button" className="button ghost" onClick={download}>
+            ดาวน์โหลด .conf
+          </button>
+          <button type="button" className="button ghost" onClick={copy}>
+            {copyLabel}
+          </button>
+        </div>
+        <CodeView content={snippet.content} />
       </div>
+
+      <ConfigCheck content={snippet.content} hideWhenClean />
 
       <footer className="meta">
         <div className="tags">
@@ -63,7 +101,7 @@ export default function SnippetDetail({ snippet, onEdit, onDelete }) {
             </span>
           ))}
         </div>
-        <time dateTime={snippet.updatedAt}>แก้ไขล่าสุด {dateFormat.format(new Date(snippet.updatedAt))}</time>
+        <time dateTime={snippet.updatedAt}>แก้ไขล่าสุด {formatDate(snippet.updatedAt)}</time>
       </footer>
     </article>
   );

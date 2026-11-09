@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
+import Dashboard from './components/Dashboard.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import SnippetDetail from './components/SnippetDetail.jsx';
 import SnippetForm from './components/SnippetForm.jsx';
@@ -13,20 +14,33 @@ function isAbort(err) {
   return err.name === 'AbortError';
 }
 
+function isTyping(target) {
+  return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+}
+
 export default function App() {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [activeTag, setActiveTag] = useState(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [list, setList] = useState(null);
   const [tags, setTags] = useState([]);
   const [selectedId, setSelectedId] = useState(idFromPath);
   const [snippet, setSnippet] = useState(null);
   const [mode, setMode] = useState('view');
+  const [draft, setDraft] = useState(null);
+  const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
   const [revision, setRevision] = useState(0);
+  const searchRef = useRef(null);
 
   const refresh = () => setRevision((value) => value + 1);
+
+  function startCreate(initial = null) {
+    setDraft(initial);
+    setMode('create');
+  }
 
   function navigate(id) {
     const path = id ? `/snippets/${id}` : '/';
@@ -45,6 +59,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return;
+      if (event.key === '/') {
+        event.preventDefault();
+        searchRef.current?.focus();
+      } else if (event.key === 'n' && mode === 'view') {
+        // Only from view mode, so the shortcut cannot discard a form in progress.
+        setDraft(null);
+        setMode('create');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mode]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       setQuery(search.trim());
       setPage(1);
@@ -55,7 +85,7 @@ export default function App() {
   useEffect(() => {
     const controller = new AbortController();
     api
-      .listSnippets({ q: query, tag: activeTag, page }, controller.signal)
+      .listSnippets({ q: query, tag: activeTag, favorite: favoritesOnly, page }, controller.signal)
       .then((result) => {
         // Deleting the only item on the last page leaves this page empty.
         if (result.data.length === 0 && page > 1) {
@@ -68,7 +98,18 @@ export default function App() {
         if (!isAbort(err)) setError(err.message);
       });
     return () => controller.abort();
-  }, [query, activeTag, page, revision]);
+  }, [query, activeTag, favoritesOnly, page, revision]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .getStats(controller.signal)
+      .then(setStats)
+      .catch((err) => {
+        if (!isAbort(err)) setError(err.message);
+      });
+    return () => controller.abort();
+  }, [revision]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,6 +148,24 @@ export default function App() {
     setPage(1);
   }
 
+  function toggleFavoritesOnly() {
+    setFavoritesOnly((value) => !value);
+    setPage(1);
+  }
+
+  function handleDuplicate() {
+    startCreate({ ...snippet, title: `${snippet.title} (สำเนา)`.slice(0, 120) });
+  }
+
+  async function handleToggleFavorite() {
+    try {
+      setSnippet(await api.setFavorite(snippet.id, !snippet.favorite));
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleSave(values) {
     const saved = mode === 'edit' ? await api.updateSnippet(snippet.id, values) : await api.createSnippet(values);
     setSnippet(saved);
@@ -126,18 +185,24 @@ export default function App() {
 
   let main;
   if (mode === 'create') {
-    main = <SnippetForm key="create" onSave={handleSave} onCancel={() => setMode('view')} />;
+    main = (
+      <SnippetForm key={`create-${draft?.id ?? 'new'}`} draft={draft} onSave={handleSave} onCancel={() => setMode('view')} />
+    );
   } else if (mode === 'edit' && snippet) {
     main = <SnippetForm key={snippet.id} snippet={snippet} onSave={handleSave} onCancel={() => setMode('view')} />;
   } else if (snippet) {
-    main = <SnippetDetail key={snippet.id} snippet={snippet} onEdit={() => setMode('edit')} onDelete={handleDelete} />;
-  } else {
     main = (
-      <div className="empty-state">
-        <h2>เลือก snippet จากรายการ</h2>
-        <p>หรือเพิ่ม config ชุดใหม่เก็บไว้ใช้ซ้ำ</p>
-      </div>
+      <SnippetDetail
+        key={snippet.id}
+        snippet={snippet}
+        onEdit={() => setMode('edit')}
+        onDelete={handleDelete}
+        onDuplicate={handleDuplicate}
+        onToggleFavorite={handleToggleFavorite}
+      />
     );
+  } else {
+    main = <Dashboard stats={stats} tags={tags} onSelect={navigate} onSelectTag={selectTag} />;
   }
 
   return (
@@ -145,13 +210,17 @@ export default function App() {
       <Sidebar
         search={search}
         onSearch={setSearch}
+        searchRef={searchRef}
         tags={tags}
         activeTag={activeTag}
         onSelectTag={selectTag}
+        favoritesOnly={favoritesOnly}
+        favoriteCount={stats?.favorites}
+        onToggleFavorites={toggleFavoritesOnly}
         list={list}
         selectedId={selectedId}
         onSelect={navigate}
-        onCreate={() => setMode('create')}
+        onCreate={() => startCreate()}
         onPage={setPage}
       />
       <main className="main">

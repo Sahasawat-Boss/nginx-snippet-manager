@@ -30,6 +30,10 @@ export function createApp(db) {
     res.json({ data: repo.listTags() });
   });
 
+  app.get('/api/stats', (req, res) => {
+    res.json(repo.stats());
+  });
+
   app.get('/api/snippets', (req, res) => {
     const page = parseIntParam(req.query.page, { fallback: 1, max: 1_000_000 });
     const limit = parseIntParam(req.query.limit, { fallback: 20, max: 100 });
@@ -40,7 +44,8 @@ export function createApp(db) {
 
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const tag = typeof req.query.tag === 'string' ? req.query.tag.trim().toLowerCase() : '';
-    res.json(repo.list({ q, tag, page, limit }));
+    const favorite = req.query.favorite === 'true';
+    res.json(repo.list({ q, tag, favorite, page, limit }));
   });
 
   app.get('/api/snippets/:id', (req, res) => {
@@ -63,6 +68,18 @@ export function createApp(db) {
     const { value, errors } = validateSnippet(req.body);
     if (errors) return sendValidationError(res, errors);
     const snippet = repo.update(id, value);
+    if (!snippet) return sendNotFound(res);
+    res.json(snippet);
+  });
+
+  app.put('/api/snippets/:id/favorite', (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return sendNotFound(res);
+    const favorite = req.body?.favorite;
+    if (typeof favorite !== 'boolean') {
+      return sendValidationError(res, { favorite: 'favorite ต้องเป็น true หรือ false' });
+    }
+    const snippet = repo.setFavorite(id, favorite);
     if (!snippet) return sendNotFound(res);
     res.json(snippet);
   });

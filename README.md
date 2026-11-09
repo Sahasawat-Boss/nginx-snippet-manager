@@ -14,6 +14,16 @@ Browser → nginx (:8080)
 | API | Node 22, Express, SQLite (`node:sqlite`) | `api/` |
 | หน้าเว็บ | React, Vite | `web/` |
 
+## ฟีเจอร์
+
+- เพิ่ม แก้ไข ลบ ทำสำเนา ค้นหา และกรอง snippet ด้วย tag
+- รายการโปรด: กดดาวเพื่อปักไว้บนสุด และกรองดูเฉพาะรายการโปรดได้
+- หน้าภาพรวมแสดงจำนวน snippet รายการที่แก้ไขล่าสุด และ tag ที่ใช้บ่อย
+- ไฮไลต์ syntax ของ nginx พร้อมเลขบรรทัด
+- ตรวจ config เบื้องต้นระหว่างพิมพ์ เช่น ลืม `;` ปีกกาไม่ครบ หรือค่าที่เสี่ยงด้านความปลอดภัย (ไม่ได้แทน `nginx -t`)
+- คัดลอก หรือดาวน์โหลดเป็นไฟล์ `.conf`
+- คีย์ลัด: `/` ค้นหา, `n` เพิ่ม snippet
+
 ## เริ่มใช้งาน
 
 ต้องมี Docker และเปิด Docker Desktop ไว้
@@ -34,12 +44,14 @@ docker compose up --build -d
 
 | Method | Path | คำอธิบาย |
 |---|---|---|
-| `GET` | `/api/snippets?q=&tag=&page=&limit=` | ดูรายการ ค้นหา และกรองด้วย tag |
+| `GET` | `/api/snippets?q=&tag=&favorite=true&page=&limit=` | ดูรายการ ค้นหา และกรองด้วย tag หรือรายการโปรด |
 | `GET` | `/api/snippets/:id` | ดูรายการเดียว |
 | `POST` | `/api/snippets` | เพิ่ม |
 | `PUT` | `/api/snippets/:id` | แก้ไข |
+| `PUT` | `/api/snippets/:id/favorite` | ตั้งหรือเอาออกจากรายการโปรด (`{"favorite":true}`) |
 | `DELETE` | `/api/snippets/:id` | ลบ |
 | `GET` | `/api/tags` | ดู tag ทั้งหมดพร้อมจำนวน |
+| `GET` | `/api/stats` | ดูจำนวนรวมและรายการที่แก้ไขล่าสุด |
 | `GET` | `/api/health` | ตรวจสถานะ API |
 
 ตัวอย่างการเพิ่มข้อมูล
@@ -72,4 +84,5 @@ curl -X POST http://localhost:8080/api/snippets \
 cd api && npm install && npm run dev      # http://localhost:3000
 cd web && npm install && npm run dev      # http://localhost:5173
 cd api && npm test
+cd web && npm test
 ```

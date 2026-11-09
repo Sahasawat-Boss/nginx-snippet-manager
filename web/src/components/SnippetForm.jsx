@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ConfigCheck from './ConfigCheck.jsx';
 
 function parseTags(text) {
   return text
@@ -7,11 +8,13 @@ function parseTags(text) {
     .filter(Boolean);
 }
 
-export default function SnippetForm({ snippet, onSave, onCancel }) {
-  const [title, setTitle] = useState(snippet?.title ?? '');
-  const [description, setDescription] = useState(snippet?.description ?? '');
-  const [content, setContent] = useState(snippet?.content ?? '');
-  const [tags, setTags] = useState(snippet?.tags.join(', ') ?? '');
+// `snippet` is the record being edited; `draft` only pre-fills a new one.
+export default function SnippetForm({ snippet, draft, onSave, onCancel }) {
+  const source = snippet ?? draft;
+  const [title, setTitle] = useState(source?.title ?? '');
+  const [description, setDescription] = useState(source?.description ?? '');
+  const [content, setContent] = useState(source?.content ?? '');
+  const [tags, setTags] = useState(source?.tags.join(', ') ?? '');
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -77,6 +80,8 @@ export default function SnippetForm({ snippet, onSave, onCancel }) {
         />
         {errors.content && <small className="field-error">{errors.content}</small>}
       </label>
+
+      <ConfigCheck content={content} />
 
       <label>
         Tags (คั่นด้วยเครื่องหมายจุลภาค)

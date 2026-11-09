@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, before, beforeEach, test } from 'node:test';
 import { createApp } from '../src/app.js';
 import { openDb } from '../src/db.js';
@@ -164,6 +165,84 @@ test('seeds a new database once and does not restore deleted examples', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('upgrades a version 1 database without losing snippets', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'snippets-'));
+  const path = join(dir, 'v1.db');
+
+  try {
+    const old = new DatabaseSync(path);
+    old.exec(`
+      CREATE TABLE snippets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_snippets_updated_at ON snippets (updated_at DESC, id DESC);
+      INSERT INTO snippets (title, content, created_at, updated_at) VALUES ('kept', 'gzip on;', 'a', 'b');
+      PRAGMA user_version = 1;
+    `);
+    old.close();
+
+    const upgraded = openDb(path);
+    const rows = upgraded.prepare('SELECT title, favorite FROM snippets').all();
+    assert.deepEqual(rows.map((row) => ({ ...row })), [{ title: 'kept', favorite: 0 }]);
+    upgraded.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('stars a snippet without bumping updatedAt and lists it first', async () => {
+  const older = await createSnippet({ title: 'older' });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await createSnippet({ title: 'newer' });
+
+  const res = await request('PUT', `/api/snippets/${older.id}/favorite`, { favorite: true });
+  assert.equal(res.status, 200);
+  const starred = await res.json();
+  assert.equal(starred.favorite, true);
+  assert.equal(starred.updatedAt, older.updatedAt);
+
+  const all = await (await request('GET', '/api/snippets')).json();
+  assert.deepEqual(all.data.map((s) => s.title), ['older', 'newer']);
+
+  const onlyFavorites = await (await request('GET', '/api/snippets?favorite=true')).json();
+  assert.deepEqual(onlyFavorites.data.map((s) => s.title), ['older']);
+});
+
+test('keeps the star when a snippet is edited', async () => {
+  const created = await createSnippet();
+  await request('PUT', `/api/snippets/${created.id}/favorite`, { favorite: true });
+
+  const res = await request('PUT', `/api/snippets/${created.id}`, { title: 'Edited', content: 'gzip on;' });
+  assert.equal((await res.json()).favorite, true);
+});
+
+test('validates the favorite flag and the target snippet', async () => {
+  const created = await createSnippet();
+  assert.equal((await request('PUT', `/api/snippets/${created.id}/favorite`, { favorite: 'yes' })).status, 400);
+  assert.equal((await request('PUT', `/api/snippets/${created.id}/favorite`)).status, 400);
+  assert.equal((await request('PUT', '/api/snippets/999/favorite', { favorite: true })).status, 404);
+});
+
+test('reports stats for an empty and a populated database', async () => {
+  assert.deepEqual(await (await request('GET', '/api/stats')).json(), {
+    total: 0,
+    favorites: 0,
+    tags: 0,
+    recent: [],
+  });
+
+  const first = await createSnippet({ title: 'A', tags: ['proxy', 'cache'] });
+  await createSnippet({ title: 'B', tags: ['proxy'] });
+  await request('PUT', `/api/snippets/${first.id}/favorite`, { favorite: true });
+
+  const stats = await (await request('GET', '/api/stats')).json();
+  assert.equal(stats.total, 2);
+  assert.equal(stats.favorites, 1);
+  assert.equal(stats.tags, 2);
+  assert.equal(stats.recent.length, 2);
 });
 
 test('returns JSON for unknown routes', async () => {
